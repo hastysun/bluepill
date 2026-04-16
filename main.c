@@ -184,7 +184,7 @@ static uint32_t scan_buttons(void)
  *  reported as a brief button pulse lasting ENC_PULSE_MS so
  *  DCS (and other sims) register it as a button press.
  *
- *  Wiring: encoder common to GND, A→PA0, B→PA1.
+ *  Wiring: encoder common to GND, A→PA9, B→PA10, push→PA15.
  *  Most encoders with detents produce one full quadrature
  *  cycle per detent (4 state transitions, 1 count).
  */

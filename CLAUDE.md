@@ -33,7 +33,8 @@ Single-file firmware (`main.c`) targeting ARM Cortex-M3. No RTOS — bare-metal 
 - **Timing** — 1ms SysTick counter; all debounce/pulse/blink logic uses non-blocking comparisons
 
 **Key constants** (top of `main.c`, easy to tune):
-- `NUM_BUTTONS = 19` (16 physical + 3 encoder)
+- `NUM_BUTTONS = 19` — physical GPIO inputs only (16 buttons + 3 ignition lines). The rotary encoder (CW/CCW/push) is decoded separately and mapped to additional HID button bits.
+- `HID_NUM_BUTTONS = 24` — buttons exposed in the HID descriptor (22 currently wired, bits 22–23 reserved).
 - `DEBOUNCE_MS = 5`, `ENC_PULSE_MS = 50`, `LED_BLINK_MS = 500`
 
 ## File Layout
