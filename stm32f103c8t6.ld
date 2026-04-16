@@ -1,5 +1,9 @@
 /* STM32F103C8T6 linker script for libopencm3 — self-contained */
 
+/* NOTE: The datasheet specifies 64K flash for C8T6, but most parts
+ * in the wild (clone Blue Pills included) actually ship with the
+ * full 128K die and the extra bank is usable. Bump to 128K below
+ * if your unit has it — verify with `st-info --chipid` / `st-flash`. */
 MEMORY
 {
     rom (rx)  : ORIGIN = 0x08000000, LENGTH = 64K

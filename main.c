@@ -22,7 +22,7 @@
 #include <libopencm3/usb/hid.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/cm3/nvic.h>
-#include <string.h>
+#include <stddef.h>
 
 /* ============================================================
  *  Configuration
@@ -547,9 +547,8 @@ int main(void)
     gpio_init();
     /* usb_force_reset(); */  /* Not needed on WeAct Blue Pill Plus */
 
-    memset(debounce_ts, 0, sizeof(debounce_ts));
-    memset(raw_state, 0, sizeof(raw_state));
-    memset(stable_state, 0, sizeof(stable_state));
+    /* debounce_ts/raw_state/stable_state are file-scope statics,
+     * so they're already zero-initialised by the C startup code. */
 
     systick_init();
     encoder_init();
