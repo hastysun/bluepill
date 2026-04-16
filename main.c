@@ -17,6 +17,7 @@
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/desig.h>
 #include <libopencm3/stm32/st_usbfs.h>
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/hid.h>
@@ -415,10 +416,16 @@ static const struct usb_device_descriptor dev_descr = {
     .bNumConfigurations = 1,
 };
 
+/* USB serial — filled at boot from the MCU's 96-bit unique ID so
+ * every unit enumerates with a distinct 12-hex-digit serial number.
+ * Windows keys HID settings per serial, so distinct serials let
+ * users plug in multiple boxes without config collisions. */
+static char serial_str[13];
+
 static const char *usb_strings[] = {
     "DIY",
     "STM32 Button Box",
-    "BB-001",
+    serial_str,
 };
 
 /* ============================================================
@@ -553,6 +560,8 @@ int main(void)
 
     systick_init();
     encoder_init();
+
+    desig_get_unique_id_as_dfu(serial_str);
 
     usbd_dev = usbd_init(&st_usbfs_v1_usb_driver,
                          &dev_descr, &config,
