@@ -32,6 +32,7 @@
 #define NUM_BUTTONS       19       /* Physical button/switch inputs    */
 #define DEBOUNCE_MS       5        /* Button debounce time             */
 #define ENC_PULSE_MS      50       /* How long encoder "press" lasts   */
+#define ENC_GAP_MS        15       /* Gap between queued encoder pulses*/
 #define LED_BLINK_MS      500      /* Onboard LED half-period          */
 
 /* HID button indices (0-based bit positions) */
@@ -180,10 +181,15 @@ static uint32_t scan_buttons(void)
  *  Rotary Encoder — Quadrature Decoder
  * ============================================================
  *
- *  Uses a 2-bit state machine on the A/B signals. Each full
- *  detent click produces one CW or CCW event. The event is
- *  reported as a brief button pulse lasting ENC_PULSE_MS so
- *  DCS (and other sims) register it as a button press.
+ *  Uses a 2-bit state machine on the A/B signals. The decoder
+ *  accumulates sub-counts from the transition table; every ±4
+ *  sub-counts equals one full detent click, which is queued as
+ *  a pending CW or CCW pulse.
+ *
+ *  Pending pulses drain one at a time: each is emitted for
+ *  ENC_PULSE_MS with an ENC_GAP_MS off-period before the next.
+ *  This lets the sim see a distinct release edge between clicks
+ *  when the knob is spun faster than ENC_PULSE_MS per detent.
  *
  *  Wiring: encoder common to GND, A→PA9, B→PA10, push→PA15.
  *  Most encoders with detents produce one full quadrature
@@ -191,8 +197,13 @@ static uint32_t scan_buttons(void)
  */
 
 static uint8_t  enc_last_state;
-static uint32_t enc_cw_until;     /* millis() when CW pulse expires  */
-static uint32_t enc_ccw_until;    /* millis() when CCW pulse expires  */
+static int8_t   enc_sub_count;        /* ±4 per detent before emitting */
+static uint8_t  enc_pending_cw;       /* queued CW pulses (cap 255)    */
+static uint8_t  enc_pending_ccw;      /* queued CCW pulses (cap 255)   */
+static uint32_t enc_cw_off_at;        /* millis() when CW pulse ends   */
+static uint32_t enc_ccw_off_at;       /* millis() when CCW pulse ends  */
+static uint32_t enc_cw_ready_at;      /* earliest next CW pulse start  */
+static uint32_t enc_ccw_ready_at;     /* earliest next CCW pulse start */
 
 /* Encoder push button debounce */
 static uint32_t enc_sw_debounce_ts;
@@ -216,8 +227,13 @@ static void encoder_init(void)
     uint8_t a = gpio_get(ENC_A_PORT, ENC_A_PIN) ? 1 : 0;
     uint8_t b = gpio_get(ENC_B_PORT, ENC_B_PIN) ? 1 : 0;
     enc_last_state = (a << 1) | b;
-    enc_cw_until = 0;
-    enc_ccw_until = 0;
+    enc_sub_count = 0;
+    enc_pending_cw = 0;
+    enc_pending_ccw = 0;
+    enc_cw_off_at = 0;
+    enc_ccw_off_at = 0;
+    enc_cw_ready_at = 0;
+    enc_ccw_ready_at = 0;
     enc_sw_debounce_ts = 0;
     enc_sw_raw = 0;
     enc_sw_stable = 0;
@@ -228,31 +244,45 @@ static uint32_t scan_encoder(void)
     uint32_t now = millis();
     uint32_t bits = 0;
 
-    /* --- Quadrature decode --- */
+    /* --- Quadrature decode: accumulate sub-counts, queue detents --- */
     uint8_t a = gpio_get(ENC_A_PORT, ENC_A_PIN) ? 1 : 0;
     uint8_t b = gpio_get(ENC_B_PORT, ENC_B_PIN) ? 1 : 0;
     uint8_t curr_state = (a << 1) | b;
 
     if (curr_state != enc_last_state) {
         int8_t dir = enc_table[(enc_last_state << 2) | curr_state];
-        if (dir == +1)
-            enc_cw_until = now + ENC_PULSE_MS;
-        else if (dir == -1)
-            enc_ccw_until = now + ENC_PULSE_MS;
+        enc_sub_count += dir;
+        if (enc_sub_count >= 4) {
+            if (enc_pending_cw < 0xFF) enc_pending_cw++;
+            enc_sub_count = 0;
+        } else if (enc_sub_count <= -4) {
+            if (enc_pending_ccw < 0xFF) enc_pending_ccw++;
+            enc_sub_count = 0;
+        }
         enc_last_state = curr_state;
     }
 
-    /* CW pulse active? */
-    if (enc_cw_until && (int32_t)(now - enc_cw_until) < 0)
+    /* --- Drive CW pulse from queue --- */
+    if ((int32_t)(enc_cw_off_at - now) > 0) {
         bits |= (1UL << BTN_ENC_CW);
-    else
-        enc_cw_until = 0;
+    } else if (enc_pending_cw > 0 &&
+               (int32_t)(now - enc_cw_ready_at) >= 0) {
+        enc_pending_cw--;
+        enc_cw_off_at   = now + ENC_PULSE_MS;
+        enc_cw_ready_at = enc_cw_off_at + ENC_GAP_MS;
+        bits |= (1UL << BTN_ENC_CW);
+    }
 
-    /* CCW pulse active? */
-    if (enc_ccw_until && (int32_t)(now - enc_ccw_until) < 0)
+    /* --- Drive CCW pulse from queue --- */
+    if ((int32_t)(enc_ccw_off_at - now) > 0) {
         bits |= (1UL << BTN_ENC_CCW);
-    else
-        enc_ccw_until = 0;
+    } else if (enc_pending_ccw > 0 &&
+               (int32_t)(now - enc_ccw_ready_at) >= 0) {
+        enc_pending_ccw--;
+        enc_ccw_off_at   = now + ENC_PULSE_MS;
+        enc_ccw_ready_at = enc_ccw_off_at + ENC_GAP_MS;
+        bits |= (1UL << BTN_ENC_CCW);
+    }
 
     /* --- Encoder push button with debounce --- */
     uint8_t sw = (gpio_get(ENC_SW_PORT, ENC_SW_PIN) == 0) ? 1 : 0;
