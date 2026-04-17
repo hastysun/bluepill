@@ -35,7 +35,7 @@
 #define ENC_PULSE_MS      50       /* How long encoder "press" lasts   */
 #define ENC_GAP_MS        15       /* Gap between queued encoder pulses*/
 #define LED_BLINK_MS      500      /* Onboard LED half-period          */
-#define IWDG_PERIOD_MS    250      /* Independent watchdog timeout     */
+#define IWDG_PERIOD_MS    1000     /* Independent watchdog timeout     */
 
 /* HID button indices (0-based bit positions) */
 #define BTN_ENC_CW        19       /* Button 20: encoder clockwise     */
