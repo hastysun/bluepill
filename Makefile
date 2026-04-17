@@ -38,6 +38,7 @@ ARCH_FLAGS = -mthumb -mcpu=cortex-m3 -msoft-float
 
 CFLAGS  = -Os -g -Wall -Wextra \
           -fno-common -ffunction-sections -fdata-sections \
+          -MMD -MP \
           $(ARCH_FLAGS) \
           -DSTM32F1 \
           -I$(OPENCM3_DIR)/include \
@@ -47,6 +48,7 @@ LDFLAGS = $(ARCH_FLAGS) \
           -L$(OPENCM3_DIR)/lib \
           -T$(LDSCRIPT) \
           -Wl,--gc-sections \
+          -Wl,-Map=$(BUILDDIR)/$(PROJECT).map \
           -nostartfiles \
           -Wl,--print-memory-usage
 
@@ -84,3 +86,6 @@ clean:
 # Build libopencm3 if needed
 $(OPENCM3_DIR)/lib/libopencm3_stm32f1.a:
 	$(MAKE) -C $(OPENCM3_DIR) TARGETS=stm32/f1
+
+# Auto-generated header dependencies (from -MMD -MP)
+-include $(OBJS:.o=.d)
