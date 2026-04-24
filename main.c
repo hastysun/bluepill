@@ -18,7 +18,6 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/desig.h>
-#include <libopencm3/stm32/iwdg.h>
 #include <libopencm3/stm32/st_usbfs.h>
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/hid.h>
@@ -35,7 +34,6 @@
 #define ENC_PULSE_MS      50       /* How long encoder "press" lasts   */
 #define ENC_GAP_MS        15       /* Gap between queued encoder pulses*/
 #define LED_BLINK_MS      500      /* Onboard LED half-period          */
-#define IWDG_PERIOD_MS    1000     /* Independent watchdog timeout     */
 
 /* HID button indices (0-based bit positions) */
 #define BTN_ENC_CW        19       /* Button 20: encoder clockwise     */
@@ -602,19 +600,12 @@ int main(void)
 
     usbd_register_set_config_callback(usbd_dev, hid_set_config);
 
-    /* Independent watchdog — auto-reset the MCU if the main loop
-     * wedges (e.g. USB stack gets stuck). Fed every iteration,
-     * so the period only needs to cover worst-case main-loop time. */
-    iwdg_set_period_ms(IWDG_PERIOD_MS);
-    iwdg_start();
-
     uint32_t last_report = 0;
     uint32_t last_led    = 0;
     uint32_t prev_all    = 0xFFFFFFFF;  /* Force first report */
     uint32_t led2_off_at = 0;
 
     while (1) {
-        iwdg_reset();
         usbd_poll(usbd_dev);
 
         uint32_t now = millis();
