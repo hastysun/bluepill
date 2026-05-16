@@ -57,12 +57,15 @@ Three pre-built configurations are available. Select one with `VARIANT=`:
 |------------------|---------|----------|---------------------|--------|---------------------------|
 | `default`        | 7       | 6        | `STM32 Button Box`  | 0x0001 | `pinout-default.svg`      |
 | `all_encoders`   | 4       | 7        | `STM32 Encoder Box` | 0x0002 | `pinout-all_encoders.svg` |
-| `three_encoders` | 16      | 3        | `STM32 Mixed Box`   | 0x0003 | —                         |
+| `three_encoders` | 16      | 3        | `STM32 Mixed Box`   | 0x0003 | `pinout-three_encoders.svg` |
 
 ```bash
 # Build and flash a specific variant
 make VARIANT=three_encoders
 make VARIANT=three_encoders flash
+
+# Build every variant at once (useful after changing main.c)
+make all-variants
 ```
 
 > **Why distinct PID + product string?** Windows DirectInput and DCS World

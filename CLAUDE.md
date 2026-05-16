@@ -11,6 +11,7 @@ USB HID joystick firmware for the STM32F103C8T6 (Blue Pill). Enumerates as a 32-
 ```bash
 make                          # Build default variant → build/default/button_box.{elf,bin,hex}
 make VARIANT=all_encoders     # Build a named variant → build/all_encoders/...
+make all-variants             # Build every known variant in sequence
 make flash                    # Flash via ST-Link (respects VARIANT)
 make size                     # Show flash/RAM usage
 make clean                    # Remove every variant's build dir

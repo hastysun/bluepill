@@ -48,6 +48,11 @@
 #define HID_NUM_BUTTONS   32
 #define HID_REPORT_BYTES  ((HID_NUM_BUTTONS + 7) / 8)
 
+/* Catch variants that accidentally overflow the HID report at compile time.
+ * Buttons occupy bits 0..NUM_BUTTONS-1; encoders follow sequentially. */
+_Static_assert(NUM_BUTTONS + NUM_ENCODERS * 3 <= HID_NUM_BUTTONS,
+    "Variant exceeds HID_NUM_BUTTONS — raise HID_NUM_BUTTONS or reduce buttons/encoders");
+
 /* ============================================================
  *  Pin Map — provided by the variant header (variants/<name>.h)
  *

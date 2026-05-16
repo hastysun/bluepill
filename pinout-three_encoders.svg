@@ -17,10 +17,6 @@
     <filter id="boardShadow" x="-10%" y="-5%" width="120%" height="110%">
       <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.55"/>
     </filter>
-    <filter id="freeGlow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="4" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
     <style><![CDATA[
       .title     { font-size: 28px; font-weight: 700; fill: #f1f5f9; letter-spacing: 0.3px; }
       .subtitle  { font-size: 14px; fill: #94a3b8; letter-spacing: 0.4px; }
@@ -33,11 +29,9 @@
       .silk      { fill: #6a85ae; font-size: 11px; font-family: ui-monospace, monospace; letter-spacing: 0.6px; }
       .silk-mcu  { fill: #a8beda; font-size: 15px; font-family: ui-monospace, monospace; font-weight: 700; letter-spacing: 1.4px; }
       .btn   { fill: #c4b5fd; }
-      .ign   { fill: #f9a8d4; }
       .enc   { fill: #6ee7b7; }
       .led   { fill: #fcd34d; }
       .usb   { fill: #93c5fd; }
-      .free  { fill: #4ade80; font-weight: 800; letter-spacing: 0.6px; }
       .pwr   { fill: #e2e8f0; }
       .gnd   { fill: #cbd5e1; }
       .dim   { fill: #64748b; }
@@ -47,7 +41,7 @@
   <rect width="820" height="1140" fill="#0b1220"/>
 
   <text x="410" y="52" text-anchor="middle" class="title">STM32F103C8T6 Blue Pill — Pin Allocation</text>
-  <text x="410" y="78" text-anchor="middle" class="subtitle">default variant · 7 buttons + 6 encoders · WeAct Blue Pill Plus</text>
+  <text x="410" y="78" text-anchor="middle" class="subtitle">three_encoders variant · 16 buttons + 3 encoders · WeAct Blue Pill Plus</text>
 
   <rect x="320" y="100" width="180" height="52" rx="5" fill="url(#usb)" stroke="#1e293b" stroke-width="1"/>
   <rect x="338" y="116" width="144" height="22" rx="2" fill="#1a1f2e"/>
@@ -89,7 +83,7 @@
 
     <circle cx="250" cy="344" r="6" fill="url(#pin)"/>
     <text x="268" y="348" class="chip">PB15</text>
-    <text x="238" y="348" text-anchor="end" class="sig btn">Button 7</text>
+    <text x="238" y="348" text-anchor="end" class="sig btn">Button 12</text>
 
     <circle cx="250" cy="382" r="6" fill="url(#pin)"/>
     <text x="268" y="386" class="chip">PA8</text>
@@ -113,35 +107,35 @@
 
     <circle cx="250" cy="572" r="6" fill="url(#pin)"/>
     <text x="268" y="576" class="chip">PA15</text>
-    <text x="238" y="576" text-anchor="end" class="sig enc">Encoder 5 A</text>
+    <text x="238" y="576" text-anchor="end" class="sig btn">Button 16</text>
 
     <circle cx="250" cy="610" r="6" fill="url(#pin)"/>
     <text x="268" y="614" class="chip">PB3</text>
-    <text x="238" y="614" text-anchor="end" class="sig enc">Encoder 5 B</text>
+    <text x="238" y="614" text-anchor="end" class="sig btn">Button 3</text>
 
     <circle cx="250" cy="648" r="6" fill="url(#pin)"/>
     <text x="268" y="652" class="chip">PB4</text>
-    <text x="238" y="652" text-anchor="end" class="sig enc">Encoder 5 Push</text>
+    <text x="238" y="652" text-anchor="end" class="sig btn">Button 4</text>
 
     <circle cx="250" cy="686" r="6" fill="url(#pin)"/>
     <text x="268" y="690" class="chip">PB5</text>
-    <text x="238" y="690" text-anchor="end" class="sig enc">Encoder 6 A</text>
+    <text x="238" y="690" text-anchor="end" class="sig btn">Button 5</text>
 
     <circle cx="250" cy="724" r="6" fill="url(#pin)"/>
     <text x="268" y="728" class="chip">PB6</text>
-    <text x="238" y="728" text-anchor="end" class="sig enc">Encoder 6 B</text>
+    <text x="238" y="728" text-anchor="end" class="sig btn">Button 6</text>
 
     <circle cx="250" cy="762" r="6" fill="url(#pin)"/>
     <text x="268" y="766" class="chip">PB7</text>
-    <text x="238" y="766" text-anchor="end" class="sig enc">Encoder 6 Push</text>
+    <text x="238" y="766" text-anchor="end" class="sig btn">Button 7</text>
 
     <circle cx="250" cy="800" r="6" fill="url(#pin)"/>
     <text x="268" y="804" class="chip">PB8</text>
-    <text x="238" y="804" text-anchor="end" class="sig btn">Button 3</text>
+    <text x="238" y="804" text-anchor="end" class="sig btn">Button 8</text>
 
     <circle cx="250" cy="838" r="6" fill="url(#pin)"/>
     <text x="268" y="842" class="chip">PB9</text>
-    <text x="238" y="842" text-anchor="end" class="sig btn">Button 4</text>
+    <text x="238" y="842" text-anchor="end" class="sig btn">Button 9</text>
 
     <circle cx="250" cy="876" r="6" fill="#e2e8f0"/>
     <text x="268" y="880" class="chip">5V</text>
@@ -159,11 +153,11 @@
   <g>
     <circle cx="570" cy="230" r="6" fill="url(#pin)"/>
     <text x="552" y="234" text-anchor="end" class="chip">PB11</text>
-    <text x="582" y="234" class="sig btn">Button 6</text>
+    <text x="582" y="234" class="sig btn">Button 11</text>
 
     <circle cx="570" cy="268" r="6" fill="url(#pin)"/>
     <text x="552" y="272" text-anchor="end" class="chip">PB10</text>
-    <text x="582" y="272" class="sig btn">Button 5</text>
+    <text x="582" y="272" class="sig btn">Button 10</text>
 
     <circle cx="570" cy="306" r="6" fill="url(#pin)"/>
     <text x="552" y="310" text-anchor="end" class="chip">PB1</text>
@@ -197,15 +191,15 @@
 
     <circle cx="570" cy="572" r="6" fill="url(#pin)"/>
     <text x="552" y="576" text-anchor="end" class="chip">PA2</text>
-    <text x="582" y="576" class="sig enc">Encoder 4 Push</text>
+    <text x="582" y="576" class="sig btn">Button 15</text>
 
     <circle cx="570" cy="610" r="6" fill="url(#pin)"/>
     <text x="552" y="614" text-anchor="end" class="chip">PA1</text>
-    <text x="582" y="614" class="sig enc">Encoder 4 B</text>
+    <text x="582" y="614" class="sig btn">Button 14</text>
 
     <circle cx="570" cy="648" r="6" fill="url(#pin)"/>
     <text x="552" y="652" text-anchor="end" class="chip">PA0</text>
-    <text x="582" y="652" class="sig enc">Encoder 4 A</text>
+    <text x="582" y="652" class="sig btn">Button 13</text>
 
     <circle cx="570" cy="686" r="6" fill="url(#pin)" opacity="0.55"/>
     <text x="552" y="690" text-anchor="end" class="chip">PC15</text>
@@ -246,7 +240,7 @@
 
   <g transform="translate(60, 1115)" font-size="14">
     <g><circle cx="8" cy="-4" r="6" class="btn"/><text x="22" y="0" class="legend">Buttons</text></g>
-    <g transform="translate(110, 0)"><circle cx="8" cy="-4" r="6" class="enc"/><text x="22" y="0" class="legend">Encoders (×6)</text></g>
+    <g transform="translate(110, 0)"><circle cx="8" cy="-4" r="6" class="enc"/><text x="22" y="0" class="legend">Encoders (×3)</text></g>
     <g transform="translate(255, 0)"><circle cx="8" cy="-4" r="6" class="led"/><text x="22" y="0" class="legend">LED</text></g>
     <g transform="translate(330, 0)"><circle cx="8" cy="-4" r="6" class="usb"/><text x="22" y="0" class="legend">USB</text></g>
     <g transform="translate(405, 0)"><circle cx="8" cy="-4" r="6" class="pwr"/><text x="22" y="0" class="legend">Power / GND</text></g>
