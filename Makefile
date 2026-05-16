@@ -65,10 +65,19 @@ LDFLAGS = $(ARCH_FLAGS) \
 
 LDLIBS  = -lopencm3_stm32f1 -lc -lgcc -lnosys
 
+# Variants — all known hardware configurations
+VARIANTS = default all_encoders three_encoders
+
 # Rules
-.PHONY: all flash clean size
+.PHONY: all flash clean size all-variants
 
 all: $(BUILDDIR)/$(PROJECT).bin $(BUILDDIR)/$(PROJECT).hex size
+
+all-variants:
+	@for v in $(VARIANTS); do \
+		echo "=== Building $$v ==="; \
+		$(MAKE) VARIANT=$$v || exit 1; \
+	done
 
 $(BUILDDIR)/$(PROJECT).elf: $(OBJS) $(OPENCM3_DIR)/lib/libopencm3_stm32f1.a | $(BUILDDIR)
 	$(CC) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $@
