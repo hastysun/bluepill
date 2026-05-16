@@ -58,4 +58,11 @@ Single-file firmware (`main.c`) targeting ARM Cortex-M3. No RTOS — bare-metal 
 
 ## libopencm3
 
-Low-level hardware abstraction (no CubeMX/HAL). Headers are in `libopencm3/include/`, the static library (`libopencm3_stm32f1.a`) is built from source on first `make`. Re-run `make -C libopencm3 TARGETS=stm32/f1` if headers change.
+Low-level hardware abstraction (no CubeMX/HAL). Tracked as a git submodule. On a fresh clone:
+
+```bash
+git submodule update --init
+make -C libopencm3 TARGETS=stm32/f1
+```
+
+Headers are in `libopencm3/include/`, the static library (`libopencm3_stm32f1.a`) is built from source. Re-run `make -C libopencm3 TARGETS=stm32/f1` if headers change.
