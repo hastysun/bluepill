@@ -1,12 +1,10 @@
 /**
  * main.c — STM32F103 USB HID Button Box (libopencm3)
  *
- * 24-button USB joystick for the Blue Pill:
- *   - 16 physical buttons/toggle switches (buttons 1–16)
- *   - 1 rotary encoder as CW/CCW button pulses (buttons 17–18)
- *   - 1 encoder push button (button 19)
- *   - Buttons 20–24 reserved for future use
- *   - 2 status LEDs
+ * 32-button USB HID joystick firmware. The actual pin map, encoder
+ * count, USB product string, and PID all live in a variant header
+ * under variants/ — the Makefile selects one via VARIANT=<name>
+ * and passes it to the compiler as -DVARIANT_CONFIG="variants/<name>.h".
  *
  * Encoder pulses are ideal for DCS World — each detent click sends
  * a brief button press that DCS can bind to radio tuning, altimeter
@@ -26,96 +24,46 @@
 #include <libopencm3/cm3/nvic.h>
 #include <stddef.h>
 
+#include "button_box.h"
+
+/* Variant header — pin map, encoder count, USB identity. The
+ * Makefile defines VARIANT_CONFIG (e.g. "variants/default.h"). */
+#ifndef VARIANT_CONFIG
+#define VARIANT_CONFIG "variants/default.h"
+#endif
+#include VARIANT_CONFIG
+
 /* ============================================================
  *  Configuration
  * ============================================================ */
 
-#define NUM_BUTTONS       19       /* Physical button/switch inputs    */
 #define DEBOUNCE_MS       5        /* Button debounce time             */
 #define ENC_PULSE_MS      50       /* How long encoder "press" lasts   */
 #define ENC_GAP_MS        15       /* Gap between queued encoder pulses*/
 #define LED_BLINK_MS      500      /* Onboard LED half-period          */
 #define IWDG_PERIOD_MS    1000     /* Independent watchdog timeout     */
 
-/* HID button indices (0-based bit positions) */
-#define BTN_ENC_CW        19       /* Button 20: encoder clockwise     */
-#define BTN_ENC_CCW       20       /* Button 21: encoder counter-CW    */
-#define BTN_ENC_PUSH      21       /* Button 22: encoder push button   */
-#define HID_NUM_BUTTONS   24       /* Total HID buttons (3 bytes)      */
-
-/* Ignition switch — PB12/PB13/PB14 are buttons 12/13/14 in the
- * raw scan (bits 11/12/13). We mask them out and decode the
- * combination into one button per position on bits 19/20/21.  */
-#define IGN_RAW_MASK      ((1UL << 11) | (1UL << 12) | (1UL << 13))
-#define BTN_IGN_ACC       11       /* Button 12: ACC position          */
-#define BTN_IGN_ON        12       /* Button 13: ON position           */
-#define BTN_IGN_START     13       /* Button 14: START position        */
+/* HID buttons: 3 bytes covers 24, 4 bytes covers 32. With 3 encoders
+ * (9 bits) plus 16 raw buttons we need 25 bits → bump to 32. */
+#define HID_NUM_BUTTONS   32
+#define HID_REPORT_BYTES  ((HID_NUM_BUTTONS + 7) / 8)
 
 /* ============================================================
- *  Pin Map
- * ============================================================
+ *  Pin Map — provided by the variant header (variants/<name>.h)
  *
- *  --- 19 Buttons (active-low, internal pull-up) ---
- *  Btn 1  = PB0    Btn 10 = PB10
- *  Btn 2  = PB1    Btn 11 = PB11
- *  Btn 3  = PB3    Btn 12 = PB12 (IGN ACC)
- *  Btn 4  = PB4    Btn 13 = PB13 (IGN ON)
- *  Btn 5  = PB5    Btn 14 = PB14 (IGN START)
- *  Btn 6  = PB6    Btn 15 = PB15
- *  Btn 7  = PB7    Btn 16 = PA8
- *  Btn 8  = PB8    Btn 17 = PA0
- *  Btn 9  = PB9    Btn 18 = PA1
- *                   Btn 19 = PA2
+ *  The variant header defines:
+ *      NUM_BUTTONS, NUM_ENCODERS
+ *      variant_button_pins[]
+ *      variant_encoder_defs[]
+ *      DEVICE_PID, DEVICE_PRODUCT_STR
  *
- *  --- Rotary Encoder (active-low, internal pull-up) ---
- *  Encoder A    = PA9
- *  Encoder B    = PA10
- *  Encoder Push = PA15
- *
- *  --- Status LEDs (active-high, push-pull) ---
- *  LED 1  = PA3   ("USB connected" indicator)
- *  LED 2  = PA4   ("encoder activity" flash)
- *
- *  --- Reserved ---
- *  PA11/PA12 = USB D-/D+
- *  PB2       = Onboard LED (active-high, heartbeat blink)
- *  PC13      = Unused (was LED on original Blue Pill)
- */
-
-typedef struct {
-    uint32_t port;
-    uint16_t pin;
-} pin_t;
-
-static const pin_t button_pins[NUM_BUTTONS] = {
-    { GPIOB, GPIO0  },   /* 1  */
-    { GPIOB, GPIO1  },   /* 2  */
-    { GPIOB, GPIO3  },   /* 3  */
-    { GPIOB, GPIO4  },   /* 4  */
-    { GPIOB, GPIO5  },   /* 5  */
-    { GPIOB, GPIO6  },   /* 6  */
-    { GPIOB, GPIO7  },   /* 7  */
-    { GPIOB, GPIO8  },   /* 8  */
-    { GPIOB, GPIO9  },   /* 9  */
-    { GPIOB, GPIO10 },   /* 10 */
-    { GPIOB, GPIO11 },   /* 11 */
-    { GPIOB, GPIO12 },   /* 12 */
-    { GPIOB, GPIO13 },   /* 13 */
-    { GPIOB, GPIO14 },   /* 14 */
-    { GPIOB, GPIO15 },   /* 15 */
-    { GPIOA, GPIO8  },   /* 16 */
-    { GPIOA, GPIO0  },   /* 17 */
-    { GPIOA, GPIO1  },   /* 18 */
-    { GPIOA, GPIO2  },   /* 19 */
-};
-
-/* Encoder pins */
-#define ENC_A_PORT   GPIOA
-#define ENC_A_PIN    GPIO9
-#define ENC_B_PORT   GPIOA
-#define ENC_B_PIN    GPIO10
-#define ENC_SW_PORT  GPIOA
-#define ENC_SW_PIN   GPIO15
+ *  Always-reserved pins (used by every variant):
+ *      PA11/PA12 = USB D-/D+
+ *      PA13/PA14 = SWDIO/SWCLK (debug)
+ *      PA3       = LED 1 ("USB connected")
+ *      PA4       = LED 2 ("encoder activity")
+ *      PB2       = onboard heartbeat LED
+ * ============================================================ */
 
 /* LED pins */
 #define LED1_PORT    GPIOA
@@ -148,7 +96,7 @@ static void systick_init(void)
 }
 
 /* ============================================================
- *  Button Debouncer (buttons 1–16)
+ *  Button Debouncer
  * ============================================================ */
 
 static uint32_t debounce_ts[NUM_BUTTONS];
@@ -161,8 +109,8 @@ static uint32_t scan_buttons(void)
     uint32_t result = 0;
 
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        uint8_t current = (gpio_get(button_pins[i].port,
-                                     button_pins[i].pin) == 0) ? 1 : 0;
+        uint8_t current = (gpio_get(variant_button_pins[i].port,
+                                     variant_button_pins[i].pin) == 0) ? 1 : 0;
 
         if (current != raw_state[i]) {
             raw_state[i] = current;
@@ -180,7 +128,7 @@ static uint32_t scan_buttons(void)
 }
 
 /* ============================================================
- *  Rotary Encoder — Quadrature Decoder
+ *  Rotary Encoder — Quadrature Decoder (per-encoder state)
  * ============================================================
  *
  *  Uses a 2-bit state machine on the A/B signals. The decoder
@@ -193,24 +141,26 @@ static uint32_t scan_buttons(void)
  *  This lets the sim see a distinct release edge between clicks
  *  when the knob is spun faster than ENC_PULSE_MS per detent.
  *
- *  Wiring: encoder common to GND, A→PA9, B→PA10, push→PA15.
+ *  Wiring: encoder common to GND, A/B/Push to their assigned pins.
  *  Most encoders with detents produce one full quadrature
  *  cycle per detent (4 state transitions, 1 count).
  */
 
-static uint8_t  enc_last_state;
-static int8_t   enc_sub_count;        /* ±4 per detent before emitting */
-static uint8_t  enc_pending_cw;       /* queued CW pulses (cap 255)    */
-static uint8_t  enc_pending_ccw;      /* queued CCW pulses (cap 255)   */
-static uint32_t enc_cw_off_at;        /* millis() when CW pulse ends   */
-static uint32_t enc_ccw_off_at;       /* millis() when CCW pulse ends  */
-static uint32_t enc_cw_ready_at;      /* earliest next CW pulse start  */
-static uint32_t enc_ccw_ready_at;     /* earliest next CCW pulse start */
+typedef struct {
+    uint8_t  last_state;
+    int8_t   sub_count;        /* ±4 per detent before emitting */
+    uint8_t  pending_cw;       /* queued CW pulses (cap 255)    */
+    uint8_t  pending_ccw;      /* queued CCW pulses (cap 255)   */
+    uint32_t cw_off_at;        /* millis() when CW pulse ends   */
+    uint32_t ccw_off_at;       /* millis() when CCW pulse ends  */
+    uint32_t cw_ready_at;      /* earliest next CW pulse start  */
+    uint32_t ccw_ready_at;     /* earliest next CCW pulse start */
+    uint32_t sw_debounce_ts;
+    uint8_t  sw_raw;
+    uint8_t  sw_stable;
+} encoder_state_t;
 
-/* Encoder push button debounce */
-static uint32_t enc_sw_debounce_ts;
-static uint8_t  enc_sw_raw;
-static uint8_t  enc_sw_stable;
+static encoder_state_t enc_state[NUM_ENCODERS];
 
 /*
  * Quadrature state transition table.
@@ -226,113 +176,108 @@ static const int8_t enc_table[16] = {
 
 static void encoder_init(void)
 {
-    uint8_t a = gpio_get(ENC_A_PORT, ENC_A_PIN) ? 1 : 0;
-    uint8_t b = gpio_get(ENC_B_PORT, ENC_B_PIN) ? 1 : 0;
-    enc_last_state = (a << 1) | b;
-    enc_sub_count = 0;
-    enc_pending_cw = 0;
-    enc_pending_ccw = 0;
-    enc_cw_off_at = 0;
-    enc_ccw_off_at = 0;
-    enc_cw_ready_at = 0;
-    enc_ccw_ready_at = 0;
-    enc_sw_debounce_ts = 0;
-    enc_sw_raw = 0;
-    enc_sw_stable = 0;
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+        const encoder_def_t *d = &variant_encoder_defs[i];
+        encoder_state_t     *s = &enc_state[i];
+
+        uint8_t a = gpio_get(d->a.port, d->a.pin) ? 1 : 0;
+        uint8_t b = gpio_get(d->b.port, d->b.pin) ? 1 : 0;
+        s->last_state     = (a << 1) | b;
+        s->sub_count      = 0;
+        s->pending_cw     = 0;
+        s->pending_ccw    = 0;
+        s->cw_off_at      = 0;
+        s->ccw_off_at     = 0;
+        s->cw_ready_at    = 0;
+        s->ccw_ready_at   = 0;
+        s->sw_debounce_ts = 0;
+        s->sw_raw         = 0;
+        s->sw_stable      = 0;
+    }
 }
 
-static uint32_t scan_encoder(void)
+static uint32_t scan_encoder_one(const encoder_def_t *d,
+                                 encoder_state_t *s,
+                                 uint32_t now)
 {
-    uint32_t now = millis();
     uint32_t bits = 0;
 
     /* --- Quadrature decode: accumulate sub-counts, queue detents --- */
-    uint8_t a = gpio_get(ENC_A_PORT, ENC_A_PIN) ? 1 : 0;
-    uint8_t b = gpio_get(ENC_B_PORT, ENC_B_PIN) ? 1 : 0;
+    uint8_t a = gpio_get(d->a.port, d->a.pin) ? 1 : 0;
+    uint8_t b = gpio_get(d->b.port, d->b.pin) ? 1 : 0;
     uint8_t curr_state = (a << 1) | b;
 
-    if (curr_state != enc_last_state) {
-        int8_t dir = enc_table[(enc_last_state << 2) | curr_state];
-        enc_sub_count += dir;
-        if (enc_sub_count >= 4) {
-            if (enc_pending_cw < 0xFF) enc_pending_cw++;
-            enc_sub_count = 0;
-        } else if (enc_sub_count <= -4) {
-            if (enc_pending_ccw < 0xFF) enc_pending_ccw++;
-            enc_sub_count = 0;
+    if (curr_state != s->last_state) {
+        int8_t dir = enc_table[(s->last_state << 2) | curr_state];
+        s->sub_count += dir;
+        if (s->sub_count >= 4) {
+            if (s->pending_cw < 0xFF) s->pending_cw++;
+            s->sub_count = 0;
+        } else if (s->sub_count <= -4) {
+            if (s->pending_ccw < 0xFF) s->pending_ccw++;
+            s->sub_count = 0;
         }
-        enc_last_state = curr_state;
+        s->last_state = curr_state;
     }
 
     /* --- Drive CW pulse from queue --- */
-    if ((int32_t)(enc_cw_off_at - now) > 0) {
-        bits |= (1UL << BTN_ENC_CW);
-    } else if (enc_pending_cw > 0 &&
-               (int32_t)(now - enc_cw_ready_at) >= 0) {
-        enc_pending_cw--;
-        enc_cw_off_at   = now + ENC_PULSE_MS;
-        enc_cw_ready_at = enc_cw_off_at + ENC_GAP_MS;
-        bits |= (1UL << BTN_ENC_CW);
+    if ((int32_t)(s->cw_off_at - now) > 0) {
+        bits |= (1UL << d->cw_bit);
+    } else if (s->pending_cw > 0 &&
+               (int32_t)(now - s->cw_ready_at) >= 0) {
+        s->pending_cw--;
+        s->cw_off_at   = now + ENC_PULSE_MS;
+        s->cw_ready_at = s->cw_off_at + ENC_GAP_MS;
+        bits |= (1UL << d->cw_bit);
     }
 
     /* --- Drive CCW pulse from queue --- */
-    if ((int32_t)(enc_ccw_off_at - now) > 0) {
-        bits |= (1UL << BTN_ENC_CCW);
-    } else if (enc_pending_ccw > 0 &&
-               (int32_t)(now - enc_ccw_ready_at) >= 0) {
-        enc_pending_ccw--;
-        enc_ccw_off_at   = now + ENC_PULSE_MS;
-        enc_ccw_ready_at = enc_ccw_off_at + ENC_GAP_MS;
-        bits |= (1UL << BTN_ENC_CCW);
+    if ((int32_t)(s->ccw_off_at - now) > 0) {
+        bits |= (1UL << d->ccw_bit);
+    } else if (s->pending_ccw > 0 &&
+               (int32_t)(now - s->ccw_ready_at) >= 0) {
+        s->pending_ccw--;
+        s->ccw_off_at   = now + ENC_PULSE_MS;
+        s->ccw_ready_at = s->ccw_off_at + ENC_GAP_MS;
+        bits |= (1UL << d->ccw_bit);
     }
 
     /* --- Encoder push button with debounce --- */
-    uint8_t sw = (gpio_get(ENC_SW_PORT, ENC_SW_PIN) == 0) ? 1 : 0;
+    uint8_t sw = (gpio_get(d->sw.port, d->sw.pin) == 0) ? 1 : 0;
 
-    if (sw != enc_sw_raw) {
-        enc_sw_raw = sw;
-        enc_sw_debounce_ts = now;
-    } else if (sw != enc_sw_stable) {
-        if ((now - enc_sw_debounce_ts) >= DEBOUNCE_MS)
-            enc_sw_stable = sw;
+    if (sw != s->sw_raw) {
+        s->sw_raw = sw;
+        s->sw_debounce_ts = now;
+    } else if (sw != s->sw_stable) {
+        if ((now - s->sw_debounce_ts) >= DEBOUNCE_MS)
+            s->sw_stable = sw;
     }
 
-    if (enc_sw_stable)
-        bits |= (1UL << BTN_ENC_PUSH);
+    if (s->sw_stable)
+        bits |= (1UL << d->push_bit);
 
     return bits;
 }
 
-/* ============================================================
- *  Ignition Switch Decoder
- * ============================================================
- *
- *  Reads the raw debounced state of PB12 (ACC), PB13 (IGN),
- *  PB14 (START) and decodes the combination into a single
- *  button per position:
- *
- *    ACC only         → Button 12 (ACC)
- *    ACC + IGN        → Button 13 (ON)
- *    ACC + IGN + START→ Button 13 + 14 (ON + START)
- *    None             → nothing  (OFF)
- */
-
-static uint32_t scan_ignition(uint32_t raw_buttons)
+static uint32_t scan_encoders(void)
 {
-    uint8_t acc   = (raw_buttons & (1UL << 11)) ? 1 : 0;
-    uint8_t ign   = (raw_buttons & (1UL << 12)) ? 1 : 0;
-    uint8_t start = (raw_buttons & (1UL << 13)) ? 1 : 0;
-
+    uint32_t now = millis();
     uint32_t bits = 0;
-
-    if (start)
-        bits = (1UL << BTN_IGN_START) | (1UL << BTN_IGN_ON);
-    else if (acc && ign)
-        bits = (1UL << BTN_IGN_ON);
-    else if (acc)
-        bits = (1UL << BTN_IGN_ACC);
-
+    for (int i = 0; i < NUM_ENCODERS; i++)
+        bits |= scan_encoder_one(&variant_encoder_defs[i], &enc_state[i], now);
     return bits;
+}
+
+/* Mask of all encoder rotation bits (CW + CCW for every encoder),
+ * used to flash LED2 on any knob movement. */
+static uint32_t encoder_rotation_mask(void)
+{
+    uint32_t m = 0;
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+        m |= (1UL << variant_encoder_defs[i].cw_bit);
+        m |= (1UL << variant_encoder_defs[i].ccw_bit);
+    }
+    return m;
 }
 
 /* ============================================================
@@ -352,7 +297,7 @@ static void led2_set(int on)
 }
 
 /* ============================================================
- *  USB Descriptors — 24-button joystick
+ *  USB Descriptors — 32-button joystick
  * ============================================================ */
 
 static const uint8_t hid_report_descriptor[] = {
@@ -361,11 +306,11 @@ static const uint8_t hid_report_descriptor[] = {
     0xA1, 0x01,   /* Collection (Application)        */
     0x05, 0x09,   /*   Usage Page (Buttons)          */
     0x19, 0x01,   /*   Usage Minimum (1)             */
-    0x29, 0x18,   /*   Usage Maximum (24)            */
+    0x29, HID_NUM_BUTTONS,  /*   Usage Maximum (32)  */
     0x15, 0x00,   /*   Logical Minimum (0)           */
     0x25, 0x01,   /*   Logical Maximum (1)           */
     0x75, 0x01,   /*   Report Size (1 bit)           */
-    0x95, 0x18,   /*   Report Count (24)             */
+    0x95, HID_NUM_BUTTONS,  /*   Report Count (32)   */
     0x81, 0x02,   /*   Input (Data, Var, Abs)        */
     0xC0          /* End Collection                  */
 };
@@ -440,7 +385,7 @@ static const struct usb_device_descriptor dev_descr = {
     .bDeviceProtocol = 0,
     .bMaxPacketSize0 = 64,
     .idVendor = 0x1209,
-    .idProduct = 0x0001,
+    .idProduct = DEVICE_PID,
     .bcdDevice = 0x0200,
     .iManufacturer = 1,
     .iProduct = 2,
@@ -456,7 +401,7 @@ static char serial_str[13];
 
 static const char *usb_strings[] = {
     "DIY",
-    "STM32 Button Box",
+    DEVICE_PRODUCT_STR,
     serial_str,
 };
 
@@ -522,8 +467,8 @@ static void gpio_init(void)
     rcc_periph_clock_enable(RCC_AFIO);
 
     /* Disable JTAG, keep SWD — frees PA15, PB3, PB4 for GPIO use.
-     * Without this, PA15 (encoder push) and PB3/PB4 (buttons 3/4)
-     * stay locked in JTAG mode and won't work as inputs. */
+     * Without this, encoder 5 (PA15/PB3/PB4) stays locked in JTAG
+     * mode and the knob won't register. */
     gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_ON, 0);
 
     /* Onboard LED on PB2 (active high, WeAct Blue Pill Plus) */
@@ -531,14 +476,17 @@ static void gpio_init(void)
                   GPIO_CNF_OUTPUT_PUSHPULL, GPIO2);
     gpio_clear(GPIOB, GPIO2);  /* LED off */
 
-    /* 19 button inputs with pull-up */
+    /* Button inputs with pull-up */
     for (int i = 0; i < NUM_BUTTONS; i++)
-        gpio_setup_input_pullup(button_pins[i].port, button_pins[i].pin);
+        gpio_setup_input_pullup(variant_button_pins[i].port, variant_button_pins[i].pin);
 
-    /* Encoder A, B, and push switch with pull-up */
-    gpio_setup_input_pullup(ENC_A_PORT, ENC_A_PIN);
-    gpio_setup_input_pullup(ENC_B_PORT, ENC_B_PIN);
-    gpio_setup_input_pullup(ENC_SW_PORT, ENC_SW_PIN);
+    /* Encoder A, B, and push switch with pull-up — for every encoder */
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+        const encoder_def_t *d = &variant_encoder_defs[i];
+        gpio_setup_input_pullup(d->a.port,  d->a.pin);
+        gpio_setup_input_pullup(d->b.port,  d->b.pin);
+        gpio_setup_input_pullup(d->sw.port, d->sw.pin);
+    }
 
     /* Status LEDs — push-pull, active high */
     gpio_set_mode(LED1_PORT, GPIO_MODE_OUTPUT_2_MHZ,
@@ -608,6 +556,8 @@ int main(void)
     iwdg_set_period_ms(IWDG_PERIOD_MS);
     iwdg_start();
 
+    const uint32_t rot_mask = encoder_rotation_mask();
+
     uint32_t last_report = 0;
     uint32_t last_led    = 0;
     uint32_t prev_all    = 0xFFFFFFFF;  /* Force first report */
@@ -622,23 +572,22 @@ int main(void)
         if ((now - last_report) >= 1) {
             last_report = now;
 
-            /* Merge all inputs into one 24-bit button field */
-            uint32_t raw_btns = scan_buttons();
-            uint32_t ign = scan_ignition(raw_btns);
-            uint32_t all = (raw_btns & ~IGN_RAW_MASK) | scan_encoder() | ign;
+            /* Merge buttons + all encoders into one 32-bit field */
+            uint32_t all = scan_buttons() | scan_encoders();
 
             if (all != prev_all) {
-                uint8_t report[3] = {
+                uint8_t report[HID_REPORT_BYTES] = {
                     (uint8_t)( all        & 0xFF),
                     (uint8_t)((all >>  8) & 0xFF),
                     (uint8_t)((all >> 16) & 0xFF),
+                    (uint8_t)((all >> 24) & 0xFF),
                 };
                 usbd_ep_write_packet(usbd_dev, 0x81,
                                      report, sizeof(report));
                 prev_all = all;
 
                 /* Flash LED2 on any encoder rotation */
-                if (all & ((1UL << BTN_ENC_CW) | (1UL << BTN_ENC_CCW))) {
+                if (all & rot_mask) {
                     led2_set(1);
                     led2_off_at = now + 30;
                 }

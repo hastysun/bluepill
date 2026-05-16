@@ -1,9 +1,14 @@
 # STM32F103 Button Box — libopencm3 Makefile
 #
 # Usage:
-#   make            Build firmware
-#   make flash      Flash via ST-Link
-#   make clean      Remove build artifacts
+#   make                          Build the default variant
+#   make VARIANT=all_encoders     Build a named variant from variants/<name>.h
+#   make flash                    Flash via ST-Link (uses VARIANT)
+#   make clean                    Remove every variant's build output
+#
+# Each variant builds into build/<variant>/ so artifacts for
+# different variants don't collide. Add a new variant by creating
+# variants/<name>.h — see variants/default.h for the template.
 #
 # Prerequisites:
 #   - arm-none-eabi-gcc toolchain
@@ -12,7 +17,11 @@
 
 # Project
 PROJECT  = button_box
-BUILDDIR = build
+
+# Variant — pin map / USB identity selector. Default matches the
+# original 7-button / 6-encoder layout.
+VARIANT  ?= default
+BUILDDIR  = build/$(VARIANT)
 
 # Toolchain
 PREFIX  ?= arm-none-eabi
@@ -41,7 +50,9 @@ CFLAGS  = -Os -g -Wall -Wextra \
           -MMD -MP \
           $(ARCH_FLAGS) \
           -DSTM32F1 \
+          -DVARIANT_CONFIG=\"variants/$(VARIANT).h\" \
           -I$(OPENCM3_DIR)/include \
+          -I. \
           -std=c99
 
 LDFLAGS = $(ARCH_FLAGS) \
@@ -81,7 +92,7 @@ flash: $(BUILDDIR)/$(PROJECT).bin
 	$(STFLASH) write $< 0x08000000
 
 clean:
-	rm -rf $(BUILDDIR)
+	rm -rf build
 
 # Build libopencm3 if needed
 $(OPENCM3_DIR)/lib/libopencm3_stm32f1.a:
