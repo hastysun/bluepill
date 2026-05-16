@@ -38,6 +38,7 @@ Single-file firmware (`main.c`) targeting ARM Cortex-M3. No RTOS — bare-metal 
 **Existing variants** (`variants/<name>.h`):
 - `default` — 7 buttons + 6 encoders, PID 0x0001, product `STM32 Button Box`.
 - `all_encoders` — 4 buttons + 7 encoders, PID 0x0002, product `STM32 Encoder Box`.
+- `three_encoders` — 16 buttons + 3 encoders, PID 0x0003, product `STM32 Mixed Box`.
 
 **Key constants in `main.c`:**
 - `HID_NUM_BUTTONS = 32` — buttons exposed in the HID descriptor (4-byte report).

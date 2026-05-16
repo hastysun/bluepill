@@ -38,8 +38,9 @@ different variants don't clobber each other.
 
 | Variant         | Buttons | Encoders | USB product string  | PID    | Pinout                       |
 |-----------------|---------|----------|---------------------|--------|------------------------------|
-| `default`       | 7       | 6        | `STM32 Button Box`  | 0x0001 | `pinout-default.svg`         |
-| `all_encoders`  | 4       | 7        | `STM32 Encoder Box` | 0x0002 | `pinout-all_encoders.svg`    |
+| `default`        | 7       | 6        | `STM32 Button Box`  | 0x0001 | `pinout-default.svg`         |
+| `all_encoders`   | 4       | 7        | `STM32 Encoder Box` | 0x0002 | `pinout-all_encoders.svg`    |
+| `three_encoders` | 16      | 3        | `STM32 Mixed Box`   | 0x0003 | —                            |
 
 Each variant has its own header in `variants/`. To add a new variant,
 copy `variants/default.h`, change `DEVICE_PID`, `DEVICE_PRODUCT_STR`,
