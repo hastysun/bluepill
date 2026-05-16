@@ -7,54 +7,81 @@ under `variants/`, and `make VARIANT=<name>` selects one. Every encoder
 sits on a contiguous 3-pin block of the header so wiring stays tidy.
 Uses libopencm3 — no HAL, no CubeMX, no IDE required.
 
+---
+
+## Toolchain Setup
+
+### macOS
+```bash
+brew install arm-none-eabi-gcc stlink
+```
+
+### Linux (Debian/Ubuntu)
+```bash
+sudo apt install gcc-arm-none-eabi stlink-tools
+```
+
+### Windows
+Install [GNU Arm Embedded Toolchain](https://developer.arm.com/downloads/-/gnu-rm) and [stlink](https://github.com/stlink-org/stlink/releases). Add both to your PATH.
+
+---
+
 ## Quick Start
 
 ```bash
-# Clone with libopencm3 as submodule
-git clone <your-repo>
-cd encoderpill
-git submodule add https://github.com/libopencm3/libopencm3.git
-cd libopencm3 && make TARGETS=stm32/f1 && cd ..
+# 1. Clone the repo and pull in libopencm3
+git clone https://github.com/hastysun/bluepill
+cd bluepill
+git submodule update --init
 
-# Build the default variant
+# 2. Build libopencm3 (one-time, takes ~1 minute)
+make -C libopencm3 TARGETS=stm32/f1
+
+# 3. Build firmware (default variant)
 make
-make flash
 
-# Build a different variant
-make VARIANT=all_encoders
-make VARIANT=all_encoders flash
+# 4. Connect ST-Link, then flash
+make flash
 ```
 
 Build output lives in `build/<variant>/button_box.{elf,bin,hex}` so
-different variants don't clobber each other.
+different variants don't overwrite each other.
 
-## Requirements
-
-- `arm-none-eabi-gcc` toolchain
-- `stlink` tools (`st-flash`)
-- libopencm3 (as submodule or set `OPENCM3_DIR=/path/to/libopencm3`)
+---
 
 ## Variants
 
-| Variant         | Buttons | Encoders | USB product string  | PID    | Pinout                       |
-|-----------------|---------|----------|---------------------|--------|------------------------------|
-| `default`       | 7       | 6        | `STM32 Button Box`  | 0x0001 | `pinout-default.svg`         |
-| `all_encoders`  | 4       | 7        | `STM32 Encoder Box` | 0x0002 | `pinout-all_encoders.svg`    |
+Three pre-built configurations are available. Select one with `VARIANT=`:
 
-Each variant has its own header in `variants/`. To add a new variant,
-copy `variants/default.h`, change `DEVICE_PID`, `DEVICE_PRODUCT_STR`,
-and the `variant_button_pins[]` / `variant_encoder_defs[]` arrays,
-then `make VARIANT=<your_name>`.
+| Variant          | Buttons | Encoders | USB product string  | PID    | Pinout                    |
+|------------------|---------|----------|---------------------|--------|---------------------------|
+| `default`        | 7       | 6        | `STM32 Button Box`  | 0x0001 | `pinout-default.svg`      |
+| `all_encoders`   | 4       | 7        | `STM32 Encoder Box` | 0x0002 | `pinout-all_encoders.svg` |
+| `three_encoders` | 16      | 3        | `STM32 Mixed Box`   | 0x0003 | —                         |
 
-> **Why distinct PID + product string?** Windows DirectInput / DCS key
-> their bindings by USB VID + PID + product string. Two variants with
-> the same identity would be treated as the same device by games, so
-> their button maps would collide. Pick a free PID from
-> [pid.codes](https://pid.codes/) (VID `0x1209`) when publishing.
+```bash
+# Build and flash a specific variant
+make VARIANT=three_encoders
+make VARIANT=three_encoders flash
+```
 
-## Wiring (default variant)
+> **Why distinct PID + product string?** Windows DirectInput and DCS World
+> key their bindings by USB VID + PID. Two variants with the same PID
+> would be treated as the same device, so their button maps would collide.
+> Pick a free PID from [pid.codes](https://pid.codes/) (VID `0x1209`) if
+> you publish or share your firmware.
 
-All inputs use internal pull-ups. Wire each button/switch between the pin and **GND**.
+---
+
+## Wiring
+
+All inputs use internal pull-ups — wire each button or encoder pin to **GND**. No external resistors needed.
+
+### Buttons
+
+Connect each button between the listed pin and GND. Active-low; 5 ms debounce built in.
+
+#### `default` variant (7 buttons)
 
 | Button | Pin  |  | Button | Pin  |
 |--------|------|--|--------|------|
@@ -63,9 +90,35 @@ All inputs use internal pull-ups. Wire each button/switch between the pin and **
 | 3      | PB8  |  | 7      | PB15 |
 | 4      | PB9  |  |        |      |
 
-Each rotary encoder uses three pins (A, B, push) wired between the pin and GND.
-A full detent click emits a brief CW or CCW button pulse. Every encoder's
-A/B/Push pins are adjacent on the header so the three wires can run together.
+#### `three_encoders` variant (16 buttons)
+
+| Button | Pin  |  | Button | Pin  |
+|--------|------|--|--------|------|
+| 1      | PB0  |  |  9     | PB9  |
+| 2      | PB1  |  | 10     | PB10 |
+| 3      | PB3  |  | 11     | PB11 |
+| 4      | PB4  |  | 12     | PB15 |
+| 5      | PB5  |  | 13     | PA0  |
+| 6      | PB6  |  | 14     | PA1  |
+| 7      | PB7  |  | 15     | PA2  |
+| 8      | PB8  |  | 16     | PA15 |
+
+#### `all_encoders` variant (4 buttons)
+
+| Button | Pin  |
+|--------|------|
+| 1      | PB0  |
+| 2      | PB8  |
+| 3      | PB9  |
+| 4      | PB15 |
+
+### Rotary Encoders
+
+Each encoder has three wires: A, B, and Push (the built-in push switch). Wire each to GND through the encoder. The three pins for each encoder sit adjacent on the header so the wires bundle naturally.
+
+A full detent click sends a 50 ms CW or CCW button pulse. The push button is debounced like a regular button.
+
+#### `default` variant (6 encoders)
 
 | Encoder | A    | B    | Push | HID buttons (CW / CCW / Push) |
 |---------|------|------|------|-------------------------------|
@@ -76,47 +129,106 @@ A/B/Push pins are adjacent on the header so the three wires can run together.
 | 5       | PA15 | PB3  | PB4  | 20 / 21 / 22                  |
 | 6       | PB5  | PB6  | PB7  | 23 / 24 / 25                  |
 
-| Function       | Pins                        |
-|----------------|-----------------------------|
-| LED 1 (USB)    | PA3                         |
-| LED 2 (encoder)| PA4                         |
-| Heartbeat LED  | PB2 (WeAct Blue Pill Plus)  |
-| USB D− / D+    | PA11 / PA12                 |
+#### `three_encoders` variant (3 encoders)
 
-> **Note:** JTAG is disabled at startup to free PA15, PB3, and PB4 as GPIO. SWD debugging still works.
+| Encoder | A    | B    | Push | HID buttons (CW / CCW / Push) |
+|---------|------|------|------|-------------------------------|
+| 1       | PA8  | PA9  | PA10 | 17 / 18 / 19                  |
+| 2       | PB12 | PB13 | PB14 | 20 / 21 / 22                  |
+| 3       | PA5  | PA6  | PA7  | 23 / 24 / 25                  |
 
-See `pinout-default.svg` / `pinout-all_encoders.svg` for the labelled board diagram of each variant.
+#### `all_encoders` variant (7 encoders)
+
+| Encoder | A    | B    | Push | HID buttons (CW / CCW / Push) |
+|---------|------|------|------|-------------------------------|
+| 1       | PA8  | PA9  | PA10 |  5 /  6 /  7                  |
+| 2       | PB12 | PB13 | PB14 |  8 /  9 / 10                  |
+| 3       | PA5  | PA6  | PA7  | 11 / 12 / 13                  |
+| 4       | PA0  | PA1  | PA2  | 14 / 15 / 16                  |
+| 5       | PA15 | PB3  | PB4  | 17 / 18 / 19                  |
+| 6       | PB5  | PB6  | PB7  | 20 / 21 / 22                  |
+| 7       | PB11 | PB10 | PB1  | 23 / 24 / 25                  |
+
+### Fixed pins (all variants)
+
+| Function        | Pin(s)                      |
+|-----------------|-----------------------------|
+| LED 1 (USB OK)  | PA3                         |
+| LED 2 (encoder) | PA4                         |
+| Heartbeat LED   | PB2 (WeAct Blue Pill Plus)  |
+| USB D− / D+     | PA11 / PA12                 |
+| SWD debug       | PA13 (SWDIO) / PA14 (SWCLK) |
+
+> **Note:** JTAG is disabled at startup to free PA15, PB3, and PB4 as GPIO. SWD debugging still works on PA13/PA14.
+
+---
 
 ## USB Enumeration
 
 The WeAct Blue Pill Plus has the correct 1.5 kΩ D+ pull-up and enumerates
 reliably. If you're using an original Blue Pill with a 10 kΩ resistor (R10),
-either replace it with 1.5 kΩ or uncomment `usb_force_reset()` in `main.c`.
+either replace R10 with 1.5 kΩ or uncomment `usb_force_reset()` in `main.c`.
 
-## Testing
+---
+
+## Testing the Device
+
+Once flashed, verify the device is working:
 
 - **Linux**: `jstest /dev/input/js0` or `evtest`
-- **Windows**: Control Panel → Game Controllers → Properties
-- **macOS**: Joystick Doctor or similar
+- **Windows**: Control Panel → Devices and Printers → right-click the device → Game controller settings → Properties
+- **macOS**: Joystick Doctor (free on the App Store)
+
+Buttons are numbered from 1 in most software. Rotate an encoder knob — you should see two buttons (CW and CCW) pulse briefly per detent. Press the encoder shaft to see the push button.
+
+---
+
+## Adding a New Variant
+
+1. Copy an existing variant header:
+   ```bash
+   cp variants/default.h variants/my_variant.h
+   ```
+
+2. Edit `variants/my_variant.h`:
+   - Set a unique `DEVICE_PID` (e.g. `0x0004`)
+   - Set a unique `DEVICE_PRODUCT_STR` (e.g. `"STM32 My Box"`)
+   - Update `NUM_BUTTONS` and `NUM_ENCODERS`
+   - Edit `variant_button_pins[]` and `variant_encoder_defs[]`
+
+3. Build and flash:
+   ```bash
+   make VARIANT=my_variant
+   make VARIANT=my_variant flash
+   ```
+
+4. Add it to the variants table in this README and in `CLAUDE.md`.
+
+---
 
 ## Project Structure
 
 ```
-├── Makefile              # Build + flash targets (uses VARIANT=)
-├── stm32f103c8t6.ld      # Linker script (64K flash, 20K RAM)
-├── main.c                # Variant-agnostic: clocks, GPIO, USB HID, debounce, encoder
-├── button_box.h          # Shared types (pin_t, encoder_def_t)
+├── Makefile                  # Build + flash targets (VARIANT= selector)
+├── stm32f103c8t6.ld          # Linker script (64K flash, 20K RAM)
+├── main.c                    # Variant-agnostic firmware
+├── button_box.h              # Shared types (pin_t, encoder_def_t)
 ├── variants/
-│   ├── default.h         # 7 buttons + 6 encoders
-│   └── all_encoders.h    # 4 buttons + 7 encoders
-├── pinout-default.svg
-├── pinout-all_encoders.svg
-└── libopencm3/           # Git submodule
+│   ├── default.h             # 7 buttons + 6 encoders
+│   ├── all_encoders.h        # 4 buttons + 7 encoders
+│   └── three_encoders.h      # 16 buttons + 3 encoders
+├── pinout-default.svg        # Board diagram — default variant
+├── pinout-all_encoders.svg   # Board diagram — all_encoders variant
+└── libopencm3/               # Git submodule (MCU peripheral library)
 ```
 
-## Customisation
+## Tuning
 
-- **Tune timing**: Adjust `DEBOUNCE_MS` / `ENC_PULSE_MS` in `main.c`
-- **New variant**: Copy a file in `variants/`, edit the pin arrays + PID + product string, then `make VARIANT=<name>`
-- **Change pins / counts in an existing variant**: Edit `variant_button_pins[]` / `variant_encoder_defs[]` + `NUM_BUTTONS` / `NUM_ENCODERS` in that variant's header
-- **VID**: Edit `dev_descr.idVendor` in `main.c` (VID applies to every variant; PID differs per-variant)
+All timing constants are at the top of `main.c`:
+
+| Constant        | Default | Effect                                              |
+|-----------------|---------|-----------------------------------------------------|
+| `DEBOUNCE_MS`   | 5 ms    | Button noise filter — increase if buttons chatter   |
+| `ENC_PULSE_MS`  | 50 ms   | How long each encoder click registers as a button press |
+| `ENC_GAP_MS`    | 15 ms   | Gap between pulses when spinning fast               |
+| `LED_BLINK_MS`  | 500 ms  | Heartbeat LED half-period                           |
